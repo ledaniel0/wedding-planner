@@ -1,33 +1,25 @@
-import React, { Component, ChangeEvent, MouseEvent } from "react";
-import { isRecord } from './record';
-
+import React, { Component } from "react";
+// import { isRecord } from './record';
+import { AddGuest } from "./AddGuest";
+import { GuestList } from "./GuestList";
+import { GuestDetail } from "./GuestDetails";
+import { Guest } from "./Guest";
 
 // TODO: When you're ready to get started, you can remove all the example 
 //   code below and start with this blank application:
 
-// type WeddingAppState = {
-// }
-// 
-// /** Displays the UI of the Wedding rsvp application. */
-// export class WeddingApp extends Component<{}, WeddingAppState> {
-// 
-//   constructor(props: {}) {
-//     super(props);
-// 
-//     this.state = {};
-//   }
-//   
-//   render = (): JSX.Element => {
-//     return <div></div>;
-//   };
-// }
+/** Describes set of possible app page views */
+  type Page = { kind: "Guest List" }
+    | { kind: "Guest Details"; guestName: string }
+    | { kind: "Add Guest" 
+    };
 
-
-type WeddingAppState = {
-  name: string;  // mirror state of name text box
-  msg: string;   // message sent from server
-}
-
+/** The parts of the state of the app */
+  type WeddingAppState = {
+    currPage: Page;
+    loading: boolean;
+    guestList: Guest[];
+  };
 
 /** Displays the UI of the Wedding rsvp application. */
 export class WeddingApp extends Component<{}, WeddingAppState> {
@@ -35,70 +27,94 @@ export class WeddingApp extends Component<{}, WeddingAppState> {
   constructor(props: {}) {
     super(props);
 
-    this.state = {name: "", msg: ""};
+    this.state = {
+      currPage: { kind: "Guest List" },
+      loading: false,
+      guestList: []
+    };
   }
-  
+
   render = (): JSX.Element => {
-    return (<div>
-        <div>
-          <label htmlFor="name">Name:</label>
-          <input type="name" id="name" value={this.state.name}
-                 onChange={this.doNameChange}></input>
-          <button onClick={this.doDummyClick}>Dummy</button>
-        </div>
-        {this.renderMessage()}
-      </div>);
-  };
+    
+    if (this.state.loading) {
+      return <div>Loading...</div>;
+    }
 
-  renderMessage = (): JSX.Element => {
-    if (this.state.msg === "") {
-      return <div></div>;
-    } else {
-      return <p>Server says: {this.state.msg}</p>;
+    switch (this.state.currPage.kind) {
+      case "Guest List":
+        return (
+          <GuestList
+            onSelectGuest={this.doSelectGuestClick}
+            onAddGuest={this.doAddGuestClick}
+          />
+        );
+      case "Add Guest":
+        return (
+          <AddGuest
+            onBack={this.doBackGuestListClick}
+          />
+        );
+      case "Guest Details":
+        return (
+          <GuestDetail
+            guestName={this.state.currPage.guestName}
+            onBack={this.doBackGuestListClick}
+          />
+        )
+      default:
+        return <div>Invalid page</div>;
     }
   };
 
-  doNameChange = (evt: ChangeEvent<HTMLInputElement>): void => {
-    this.setState({name: evt.target.value, msg: ""});
+  // Updates to Guest Details page when a guests' name is clicked
+  doSelectGuestClick = (name: string): void => {
+    this.setState({ currPage: { kind: "Guest Details", guestName: name }});
   };
 
-  doDummyClick = (_evt: MouseEvent<HTMLButtonElement>): void => {
-    const name = this.state.name.trim();
-    if (name.length > 0) {
-      const url = "/api/dummy?name=" + encodeURIComponent(name);
-      fetch(url).then(this.doDummyResp)
-          .catch(() => this.doDummyError("failed to connect to server"));
-    }
+  // Updates to Add Guest page when add guest button is clicked
+  doAddGuestClick = (): void => {
+    this.setState({ currPage: { kind: "Add Guest" }});
   };
-
-  doDummyResp = (res: Response): void => {
-    if (res.status === 200) {
-      res.json().then(this.doDummyJson)
-          .catch(() => this.doDummyError("200 response is not JSON"));
-    } else if (res.status === 400) {
-      res.text().then(this.doDummyError)
-          .catch(() => this.doDummyError("400 response is not name"));
-    } else {
-      this.doDummyError(`bad status code ${res.status}`);
-    }
-  };
-
-  doDummyJson = (data: unknown): void => {
-    if (!isRecord(data)) {
-      console.error("200 response is not a record", data);
-      return;
-    }
-
-    if (typeof data.msg !== "string") {
-      console.error("'msg' field of 200 response is not a string", data.msg);
-      return;
-    }
-
-    this.setState({msg: data.msg});
-  }
-
-  doDummyError = (msg: string): void => {
-    console.error(`Error fetching /api/dummy: ${msg}`);
+  
+  // Updates back to the Guest List view without changing anything
+  doBackGuestListClick = (): void => {
+    this.setState({ currPage: { kind: "Guest List" } });
   };
 
 }
+
+/**
+ * Calculate the number of family guests for each person
+ * @param guestList list of guests
+ * @param guestOf passed in guest of who
+ * @returns the number of guests for the person passed in
+ */
+export const doCountFamilyResponse = (guestList: Guest[], guestOf: string): number => {
+  const familyGuests = guestList.filter(guest => guest.guestOf === guestOf && guest.isFamily);
+  return familyGuests.length;
+};
+
+/**
+ * Calculates the Min number of guests for each person
+ * @param guestList list of guests
+ * @param guestOf passed in guest of who
+ * @returns the number of min guests in the list
+ */
+export const doCountMinGuestsResponse = (guestList: Guest[], guestOf: string): number => {
+  const minGuests = guestList.filter(guest => guest.guestOf === guestOf);
+  const minGuestsWith1 = minGuests.filter(guest => guest.additionalGuest === "1");
+  return minGuests.length + minGuestsWith1.length;
+};
+
+/**
+ * Calculates the Max number of guests for each person
+ * @param guestList list of guests
+ * @param guestOf passed in guest of who
+ * @returns the number of max guests in the list
+ */
+export const doCountMaxGuestsResponse = (guestList: Guest[], guestOf: string): number => {
+  const minGuests = guestList.filter(guest => guest.guestOf === guestOf);
+  const minGuestsWith1 = minGuests.filter(guest => guest.additionalGuest === "1");
+  const maxGuestsWithUnknown = minGuests.filter(guest => guest.guestOf === guestOf && guest.additionalGuest === "unknown");
+  return minGuests.length + maxGuestsWithUnknown.length + minGuestsWith1.length;
+};
